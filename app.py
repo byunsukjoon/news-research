@@ -2,7 +2,7 @@ import streamlit as st
 from supabase import create_client, Client
 import google.generativeai as genai
 import feedparser
-from urllib.parse import quote  # <--- URL 인코딩을 위해 추가
+from urllib.parse import quote
 
 # --- 1. 환경 설정 및 클라이언트 초기화 ---
 try:
@@ -15,7 +15,9 @@ except KeyError as e:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+
+# [수정 1] 모델을 최신 모델인 'gemini-1.5-flash'로 변경 (더 빠르고 에러가 적음)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- 2. UI 레이아웃 ---
 st.set_page_config(page_title="AI 뉴스 매니저", layout="wide")
@@ -28,7 +30,6 @@ news_count = st.sidebar.slider("가져올 뉴스 개수", 1, 10, 5)
 # --- 3. 주요 기능 함수 ---
 
 def fetch_and_summarize(search_term):
-    # 검색어에 포함된 띄어쓰기나 특수문자를 URL용 암호(%20 등)로 변환합니다.
     encoded_keyword = quote(search_term)
     rss_url = f"https://news.google.com/rss/search?q={encoded_keyword}&hl=ko&gl=KR&ceid=KR:ko"
     
@@ -50,13 +51,20 @@ def fetch_and_summarize(search_term):
                     source_name = entry.get('source', {}).get('title', '알 수 없음')
                     st.caption(f"출처: {source_name} | 게시일: {entry.get('published', '날짜 미상')}")
                 
-                # Gemini 요약 생성
+                # [수정 2] Gemini 요약 생성 로직 보강
+                summary_text = ""
                 try:
                     prompt = f"뉴스 제목 '{entry.title}'을 바탕으로 이 뉴스의 핵심 내용을 한 문장으로 한국어로 요약해줘."
                     response = model.generate_content(prompt)
-                    summary_text = response.text
-                except Exception:
-                    summary_text = "요약을 생성할 수 없습니다."
+                    
+                    # 답변이 정상적으로 생성되었는지 확인
+                    if response and response.text:
+                        summary_text = response.text
+                    else:
+                        summary_text = "AI가 내용을 요약하기에 부적절하다고 판단했습니다 (보안 필터링)."
+                except Exception as ai_err:
+                    # 실제 에러가 무엇인지 로그에 남기고 사용자에게 알림
+                    summary_text = f"요약 생성 중 오류 발생: {str(ai_err)[:50]}"
                 
                 st.info(f"✨ AI 요약: {summary_text}")
                 

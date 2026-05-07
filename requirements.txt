@@ -1,4 +1,4 @@
 streamlit
-google-genai
-pandas
+google-generativeai
 supabase
+feedparser
